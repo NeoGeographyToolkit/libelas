@@ -4,6 +4,8 @@ The changes are at the interface level, the resulting tool is able to read and w
 
 The facilities for handling TIF files and command-line argument handling is borrowed from https://github.com/gfacciol/mgm.
 
+Original documentation is below.
+
 ####################################################################################
 # Copyright 2011. All rights reserved.                                             #
 # Institute of Measurement and Control Systems                                     #
