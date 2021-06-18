@@ -39,6 +39,8 @@ using namespace std;
 // compute disparities of pgm image input pair file_1, file_2
 void process (const char* file_1, const char* file_2) {
 
+  int min_disp = -300, max_disp = 60;
+  
   cout << "Processing: " << file_1 << ", " << file_2 << endl;
 
   int width, height; 
@@ -48,8 +50,9 @@ void process (const char* file_1, const char* file_2) {
   float * rimg = iio_read_image_float(file_2, &rwidth, &rheight);
 
   std::cout << "--deal with padding!" << std::endl;
-  int pad = 45;
-
+  int pad = std::max(-min_disp, 0);
+  std::cout << "--padding is " << pad << std::endl;
+  
   // check for correct size
   if (width <= 0 || height <= 0 || rwidth <= 0 || rheight <= 0 ||
       width != rwidth || height != rheight) {
@@ -133,8 +136,13 @@ void process (const char* file_1, const char* file_2) {
   float* lr_disp_pad = (float*)malloc(pad_width * height * sizeof(float));
   float* rl_disp_pad = (float*)malloc(pad_width * height * sizeof(float));
   
-  // process
   Elas::parameters param;
+
+  // TODO(oalexan1): Need to think more here.
+  param.disp_min = 0;
+  param.disp_max = max_disp + pad;
+
+  // process
   param.postprocess_only_left = false;
   Elas elas(param);
   elas.process(l_img_pad, r_img_pad, lr_disp_pad, rl_disp_pad, dims);
