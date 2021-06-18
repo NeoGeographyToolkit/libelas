@@ -60,6 +60,8 @@ void process (const char* file_1, const char* file_2) {
   }
 
   int pad_width = width + pad;
+
+  // TODO(oalexan1): Make these into functions.
   
   // Convert the image pixels from floats in [0, 1] to uint8_t in [0, 255].
   // To ensure a positive disparity, pad the left image on the left with enough zeros,
@@ -139,6 +141,7 @@ void process (const char* file_1, const char* file_2) {
 
   // When the disparities have a big jump, the ones after the jump are outliers.
   // TODO(oalexan1): This is fragile.
+  // TODO(oalexan1): Make this into a function.
   float* sorted_disp = (float*)malloc(pad_width * height * sizeof(float));
   for (int i = 0; i < pad_width * height; i++)
     sorted_disp[i] = lr_disp_pad[i];
@@ -164,29 +167,25 @@ void process (const char* file_1, const char* file_2) {
     if (lr_disp_pad[i] > max_valid)
       lr_disp_pad[i] = -10.0; // invalidate the outlier disparity
   
-  // Remove the padding, and subtract the padding value from the disparity
-  // To undo the previous operations
-
+  // Remove the padding by cropping the disparity
   count = 0;
   float* lr_disp = (float*)malloc(width * height * sizeof(float));
   for (int ih = 0; ih < height; ih++) {
     for (int iw = 0; iw < width; iw++) {
-      
       lr_disp[count] = lr_disp_pad[ih * pad_width + iw + pad];
       count++;
-      
     }
   }
   
-  // Negative disparities are set to NaN.
-  // Flip the sign of the lr disparity as the libelas convention is
-  // the opposite we expect.  Ignore the rl disparity. 
+  // Negative disparities are set to NaN.  Subtract the padding. Flip
+  // the sign of the disparity to follow the ASP convention. Ignore
+  // the rl disparity.
   float nan = std::numeric_limits<float>::quiet_NaN();
   for (int32_t i = 0; i < width * height; i++) {
     if (lr_disp[i] < 0)
       lr_disp[i] = nan;
     else
-      lr_disp[i] *= -1.0;
+      lr_disp[i] = -(lr_disp[i] - pad);
   }
   
   char filename[] = "out_disp.tif";
