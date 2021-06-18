@@ -1,3 +1,6 @@
+// Modifications by Oleg Alexandrov @ NASA Ames.
+// See README.TXT for what changed. Released under the same license.
+
 /*
 Copyright 2011. All rights reserved.
 Institute of Measurement and Control Systems
@@ -20,7 +23,10 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 */
 
 #include <iostream>
+#include <limits>
+#include <algorithm>
 #include <tiffio.h>
+#include <cmath>
 #include "elas.h"
 #include "image.h"
 
@@ -35,65 +41,172 @@ void process (const char* file_1, const char* file_2) {
 
   cout << "Processing: " << file_1 << ", " << file_2 << endl;
 
-  // load images
-  image<uchar> *I1,*I2;
-  I1 = loadPGM(file_1);
-  I2 = loadPGM(file_2);
+  int lw, lh; 
+  float * limg = iio_read_image_float(file_1, &lw, &lh);
+  std::cout << "--left size is " << lw << ' ' << lh << std::endl;
+
+  int rw, rh; 
+  float * rimg = iio_read_image_float(file_2, &rw, &rh);
+  std::cout << "--right size is " << rw << ' ' << rh << std::endl;
+
+  std::cout << "--deal with padding!" << std::endl;
+  int pad = 45;
 
   // check for correct size
-  if (I1->width()<=0 || I1->height() <=0 || I2->width()<=0 || I2->height() <=0 ||
-      I1->width()!=I2->width() || I1->height()!=I2->height()) {
-    cout << "ERROR: Images must be of same size, but" << endl;
-    cout << "       I1: " << I1->width() <<  " x " << I1->height() << 
-                 ", I2: " << I2->width() <<  " x " << I2->height() << endl;
-    delete I1;
-    delete I2;
-    return;    
+  if (lw <=0 || lh <= 0 || rw <= 0 || rh <= 0 || lw != rw || lh != rh) {
+    std::cout << "ERROR: Images must be of same size, but got: " << std::endl;
+    std::cout << "  left_image:  " << lw <<  " x " << lh  << std::endl;
+    std::cout << "  right_image: " << rw <<  " x " << rh << std::endl;
+    return; 
   }
 
-  // get image width and height
-  int32_t width  = I1->width();
-  int32_t height = I1->height();
+  int width = lw + pad, height = lh;
+  
+  // Convert the image pixels from floats in [0, 1] to uint8_t in [0, 255].
+  // To ensure a positive disparity, pad the left image on the left with enough zeros,
+  // and pad the right image on the right with the same amount.
+  uint8_t* scaled_l_img = (uint8_t*)malloc(width * height * sizeof(uint8_t));
+  uint8_t* scaled_r_img = (uint8_t*)malloc(width * height * sizeof(uint8_t));
 
-  std::cout << "--width and height is " << width << ' ' << height << std::endl;
+  // Process the left image
+  for (int i = 0; i < width * height; i++) 
+    scaled_l_img[i] = 0;
+
+  int count = 0;
+  for (int ih = 0; ih < lh; ih++) {
+    for (int iw = 0; iw < lw; iw++) {
+
+      float val = limg[count];
+      if (std::isnan(val)) 
+        val = 0.0;
+
+      val *= 255.0;
+      val = round(val);
+      if (val < 0) 
+        val = 0;
+      if (val > 255.0)
+        val = 255.0;
+
+      // The zero padding is on the left, so add the 'pad' value
+      scaled_l_img[ih * width + iw + pad] = (uint8_t)val;
+      
+      count++;
+    }
+  }
+
+  // For debugging
+  //  char tmp[] = "tmp.tif";
+  //  int pd = 1;
+  //  iio_save_image_uint8_vec((char*)tmp, scaled_l_img, width, height, pd);
+  
+  // Process the right image
+  for (int i = 0; i < width * height; i++) 
+    scaled_r_img[i] = 0;
+
+  count = 0;
+  for (int ih = 0; ih < rh; ih++) {
+    for (int iw = 0; iw < rw; iw++) {
+
+      float val = rimg[count];
+      if (std::isnan(val)) 
+        val = 0.0;
+
+      val *= 255.0;
+      val = round(val);
+      if (val < 0) 
+        val = 0;
+      if (val > 255.0)
+        val = 255.0;
+
+      // The zero padding is on the right, so no need to add anything
+      scaled_r_img[ih * width + iw] = (uint8_t)val;
+      
+      count++;
+    }
+  }
   
   // allocate memory for disparity images
-  const int32_t dims[3] = {width,height,width}; // bytes per line = width
-  float* D1_data = (float*)malloc(width*height*sizeof(float));
-  float* D2_data = (float*)malloc(width*height*sizeof(float));
-
+  const int32_t dims[3] = {width, height, width}; // bytes per line = width
+  float* lr_disp = (float*)malloc(width * height * sizeof(float));
+  float* rl_disp = (float*)malloc(width * height * sizeof(float));
+  
   // process
   Elas::parameters param;
   param.postprocess_only_left = false;
   Elas elas(param);
-  elas.process(I1->data,I2->data,D1_data,D2_data,dims);
+  elas.process(scaled_l_img, scaled_r_img, lr_disp, rl_disp, dims);
 
-  // Flip the sign of disparities as the libelas convention is the opposite we expect
-  for (int32_t i=0; i<width*height; i++) {
-    D1_data[i] *= -1.0;
-    D2_data[i] *= -1.0;
+
+  // When the disparities have a big jump, the ones after the jump are outliers.
+  // TODO(oalexan1): This is fragile.
+  float* sorted_disp = (float*)malloc(width * height * sizeof(float));
+  for (int i = 0; i < width * height; i++)
+    sorted_disp[i] = lr_disp[i];
+  std::sort(sorted_disp, sorted_disp + width * height);
+
+  float max_jump = -1.0, max_valid = -1.0;
+  for (int i = 0; i < width * height + 1; i++) {
+    float a = sorted_disp[i];
+    float b = sorted_disp[i + 1];
+
+    if (a < 0) 
+      continue; // negative disparities are outliers
+
+    if (b - a > max_jump) {
+      max_jump = b - a;
+      max_valid = a;
+    }
+  }
+
+  free(sorted_disp);
+
+  for (int i = 0; i < width * height + 1; i++)
+    if (lr_disp[i] > max_valid)
+      lr_disp[i] = -10.0; // invalidate the outlier disparity
+  
+  // Remove the padding, and subtract the padding value from the disparity
+  // To undo the previous operations
+
+  count = 0;
+  float* lr_crop_disp = (float*)malloc(lw * lh * sizeof(float));
+  for (int ih = 0; ih < lh; ih++) {
+    for (int iw = 0; iw < lw; iw++) {
+      
+      lr_crop_disp[count] = lr_disp[ih * width + iw + pad];
+      count++;
+      
+    }
   }
   
-  // find maximum disparity for scaling output disparity images to [0..255]
-  float disp_min = 1.0e+10;
-  float disp_max = -disp_min;
-  for (int32_t i=0; i<width*height; i++) {
-    if (D1_data[i] > disp_max) disp_max = D1_data[i];
-    if (D2_data[i] > disp_max) disp_max = D2_data[i];
-    if (D1_data[i] < disp_min) disp_min = D1_data[i];
-    if (D2_data[i] < disp_min) disp_min = D2_data[i];
+  // Negative disparities are set to NaN.
+  // Flip the sign of the lr disparity as the libelas convention is
+  // the opposite we expect.  Ignore the rl disparity. 
+  float nan = std::numeric_limits<float>::quiet_NaN();
+  for (int32_t i = 0; i < lw * lh; i++) {
+    //if (lr_crop_disp[i] < 0)
+    //  lr_crop_disp[i] = nan;
+    //else
+    //  lr_crop_disp[i] *= -1.0;
   }
-
+  
   char filename[] = "out_disp.tif";
   std::cout << "--Writing " << filename << std::endl;
-  int nch = 1;
-  iio_save_image_float_split((char*)filename, D1_data, width, height, nch);
+  iio_save_image_float((char*)filename, lr_crop_disp, lw, lh);
   
+  char filename_lr[] = "lr_disp.tif";
+  std::cout << "--Writing " << filename_lr << std::endl;
+  iio_save_image_float((char*)filename_lr, lr_disp, width, height);
+
+  char filename_rl[] = "rl_disp.tif";
+  std::cout << "--Writing " << filename_rl << std::endl;
+  iio_save_image_float((char*)filename_rl, rl_disp, width, height);
+
   // free memory
-  delete I1;
-  delete I2;
-  free(D1_data);
-  free(D2_data);
+  free(scaled_l_img);
+  free(scaled_r_img);
+  free(lr_disp);
+  free(rl_disp);
+  free(lr_crop_disp);
 }
 
 int main (int argc, char** argv) {

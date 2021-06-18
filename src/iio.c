@@ -1,3 +1,5 @@
+// Original is from https://github.com/gfacciol/mgm/blob/master/iio/iio.c
+
 /* Copyright (C) 2015, Enric Meinhardt <enric.meinhardt@cmla.ens-cachan.fr> */
 // IIO: a library for reading small images                                  {{{1
 //
