@@ -1,3 +1,9 @@
+This is a fork of ``libelas``, from https://github.com/kou1okada/libelas, hence it is released under the same terms as the original.
+
+The changes are at the interface level, the resulting tool is able to read and write not 8-big PGM files but TIF files with float values and input parameters. It can also handle negative disparities and command line options. It changes the sign of the disparity before writing it back to disk and sets invalid disparties to NaN.
+
+The facilities for handling TIF files and command-line argument handling is borrowed from https://github.com/gfacciol/mgm.
+
 ####################################################################################
 # Copyright 2011. All rights reserved.                                             #
 # Institute of Measurement and Control Systems                                     #
