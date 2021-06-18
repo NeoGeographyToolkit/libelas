@@ -43,34 +43,32 @@ void process (const char* file_1, const char* file_2) {
 
   int lw, lh; 
   float * limg = iio_read_image_float(file_1, &lw, &lh);
-  std::cout << "--left size is " << lw << ' ' << lh << std::endl;
 
   int rw, rh; 
   float * rimg = iio_read_image_float(file_2, &rw, &rh);
-  std::cout << "--right size is " << rw << ' ' << rh << std::endl;
 
   std::cout << "--deal with padding!" << std::endl;
   int pad = 45;
 
   // check for correct size
-  if (lw <=0 || lh <= 0 || rw <= 0 || rh <= 0 || lw != rw || lh != rh) {
+  if (lw <= 0 || lh <= 0 || rw <= 0 || rh <= 0 || lw != rw || lh != rh) {
     std::cout << "ERROR: Images must be of same size, but got: " << std::endl;
     std::cout << "  left_image:  " << lw <<  " x " << lh  << std::endl;
     std::cout << "  right_image: " << rw <<  " x " << rh << std::endl;
     return; 
   }
 
-  int width = lw + pad, height = lh;
+  int pad_width = lw + pad, height = lh;
   
   // Convert the image pixels from floats in [0, 1] to uint8_t in [0, 255].
   // To ensure a positive disparity, pad the left image on the left with enough zeros,
   // and pad the right image on the right with the same amount.
-  uint8_t* scaled_l_img = (uint8_t*)malloc(width * height * sizeof(uint8_t));
-  uint8_t* scaled_r_img = (uint8_t*)malloc(width * height * sizeof(uint8_t));
+  uint8_t* l_img_pad = (uint8_t*)malloc(pad_width * height * sizeof(uint8_t));
+  uint8_t* r_img_pad = (uint8_t*)malloc(pad_width * height * sizeof(uint8_t));
 
   // Process the left image
-  for (int i = 0; i < width * height; i++) 
-    scaled_l_img[i] = 0;
+  for (int i = 0; i < pad_width * height; i++) 
+    l_img_pad[i] = 0;
 
   int count = 0;
   for (int ih = 0; ih < lh; ih++) {
@@ -88,20 +86,22 @@ void process (const char* file_1, const char* file_2) {
         val = 255.0;
 
       // The zero padding is on the left, so add the 'pad' value
-      scaled_l_img[ih * width + iw + pad] = (uint8_t)val;
+      l_img_pad[ih * pad_width + iw + pad] = (uint8_t)val;
       
       count++;
     }
   }
 
+#if 0
   // For debugging
-  //  char tmp[] = "tmp.tif";
-  //  int pd = 1;
-  //  iio_save_image_uint8_vec((char*)tmp, scaled_l_img, width, height, pd);
-  
+   char l_img_pad_file[] = "l_img_pad.tif";
+   int ch = 1;
+   iio_save_image_uint8_vec((char*)l_img_pad_file, l_img_pad, pad_width, height, ch);
+#endif
+   
   // Process the right image
-  for (int i = 0; i < width * height; i++) 
-    scaled_r_img[i] = 0;
+  for (int i = 0; i < pad_width * height; i++) 
+    r_img_pad[i] = 0;
 
   count = 0;
   for (int ih = 0; ih < rh; ih++) {
@@ -119,33 +119,32 @@ void process (const char* file_1, const char* file_2) {
         val = 255.0;
 
       // The zero padding is on the right, so no need to add anything
-      scaled_r_img[ih * width + iw] = (uint8_t)val;
+      r_img_pad[ih * pad_width + iw] = (uint8_t)val;
       
       count++;
     }
   }
   
   // allocate memory for disparity images
-  const int32_t dims[3] = {width, height, width}; // bytes per line = width
-  float* lr_disp = (float*)malloc(width * height * sizeof(float));
-  float* rl_disp = (float*)malloc(width * height * sizeof(float));
+  const int32_t dims[3] = {pad_width, height, pad_width}; // bytes per line = width
+  float* lr_disp_pad = (float*)malloc(pad_width * height * sizeof(float));
+  float* rl_disp_pad = (float*)malloc(pad_width * height * sizeof(float));
   
   // process
   Elas::parameters param;
   param.postprocess_only_left = false;
   Elas elas(param);
-  elas.process(scaled_l_img, scaled_r_img, lr_disp, rl_disp, dims);
-
+  elas.process(l_img_pad, r_img_pad, lr_disp_pad, rl_disp_pad, dims);
 
   // When the disparities have a big jump, the ones after the jump are outliers.
   // TODO(oalexan1): This is fragile.
-  float* sorted_disp = (float*)malloc(width * height * sizeof(float));
-  for (int i = 0; i < width * height; i++)
-    sorted_disp[i] = lr_disp[i];
-  std::sort(sorted_disp, sorted_disp + width * height);
+  float* sorted_disp = (float*)malloc(pad_width * height * sizeof(float));
+  for (int i = 0; i < pad_width * height; i++)
+    sorted_disp[i] = lr_disp_pad[i];
+  std::sort(sorted_disp, sorted_disp + pad_width * height);
 
   float max_jump = -1.0, max_valid = -1.0;
-  for (int i = 0; i < width * height + 1; i++) {
+  for (int i = 0; i < pad_width * height - 1; i++) {
     float a = sorted_disp[i];
     float b = sorted_disp[i + 1];
 
@@ -160,19 +159,19 @@ void process (const char* file_1, const char* file_2) {
 
   free(sorted_disp);
 
-  for (int i = 0; i < width * height + 1; i++)
-    if (lr_disp[i] > max_valid)
-      lr_disp[i] = -10.0; // invalidate the outlier disparity
+  for (int i = 0; i < pad_width * height; i++)
+    if (lr_disp_pad[i] > max_valid)
+      lr_disp_pad[i] = -10.0; // invalidate the outlier disparity
   
   // Remove the padding, and subtract the padding value from the disparity
   // To undo the previous operations
 
   count = 0;
-  float* lr_crop_disp = (float*)malloc(lw * lh * sizeof(float));
+  float* lr_disp = (float*)malloc(lw * lh * sizeof(float));
   for (int ih = 0; ih < lh; ih++) {
     for (int iw = 0; iw < lw; iw++) {
       
-      lr_crop_disp[count] = lr_disp[ih * width + iw + pad];
+      lr_disp[count] = lr_disp_pad[ih * pad_width + iw + pad];
       count++;
       
     }
@@ -183,30 +182,32 @@ void process (const char* file_1, const char* file_2) {
   // the opposite we expect.  Ignore the rl disparity. 
   float nan = std::numeric_limits<float>::quiet_NaN();
   for (int32_t i = 0; i < lw * lh; i++) {
-    //if (lr_crop_disp[i] < 0)
-    //  lr_crop_disp[i] = nan;
-    //else
-    //  lr_crop_disp[i] *= -1.0;
+    if (lr_disp[i] < 0)
+      lr_disp[i] = nan;
+    else
+      lr_disp[i] *= -1.0;
   }
   
   char filename[] = "out_disp.tif";
-  std::cout << "--Writing " << filename << std::endl;
-  iio_save_image_float((char*)filename, lr_crop_disp, lw, lh);
+  std::cout << "Writing " << filename << std::endl;
+  iio_save_image_float((char*)filename, lr_disp, lw, lh);
+
+#if 0
+  char filename_lr[] = "lr_disp_pad.tif";
+  std::cout << "Writing " << filename_lr << std::endl;
+  iio_save_image_float((char*)filename_lr, lr_disp_pad, pad_width, height);
+
+  char filename_rl[] = "rl_disp_pad.tif";
+  std::cout << "Writing " << filename_rl << std::endl;
+  iio_save_image_float((char*)filename_rl, rl_disp_pad, pad_width, height);
+#endif
   
-  char filename_lr[] = "lr_disp.tif";
-  std::cout << "--Writing " << filename_lr << std::endl;
-  iio_save_image_float((char*)filename_lr, lr_disp, width, height);
-
-  char filename_rl[] = "rl_disp.tif";
-  std::cout << "--Writing " << filename_rl << std::endl;
-  iio_save_image_float((char*)filename_rl, rl_disp, width, height);
-
   // free memory
-  free(scaled_l_img);
-  free(scaled_r_img);
+  free(l_img_pad);
+  free(r_img_pad);
+  free(lr_disp_pad);
+  free(rl_disp_pad);
   free(lr_disp);
-  free(rl_disp);
-  free(lr_crop_disp);
 }
 
 int main (int argc, char** argv) {
