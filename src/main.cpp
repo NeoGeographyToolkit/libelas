@@ -41,24 +41,25 @@ void process (const char* file_1, const char* file_2) {
 
   cout << "Processing: " << file_1 << ", " << file_2 << endl;
 
-  int lw, lh; 
-  float * limg = iio_read_image_float(file_1, &lw, &lh);
+  int width, height; 
+  float * limg = iio_read_image_float(file_1, &width, &height);
 
-  int rw, rh; 
-  float * rimg = iio_read_image_float(file_2, &rw, &rh);
+  int rwidth, rheight; 
+  float * rimg = iio_read_image_float(file_2, &rwidth, &rheight);
 
   std::cout << "--deal with padding!" << std::endl;
   int pad = 45;
 
   // check for correct size
-  if (lw <= 0 || lh <= 0 || rw <= 0 || rh <= 0 || lw != rw || lh != rh) {
+  if (width <= 0 || height <= 0 || rwidth <= 0 || rheight <= 0 ||
+      width != rwidth || height != rheight) {
     std::cout << "ERROR: Images must be of same size, but got: " << std::endl;
-    std::cout << "  left_image:  " << lw <<  " x " << lh  << std::endl;
-    std::cout << "  right_image: " << rw <<  " x " << rh << std::endl;
+    std::cout << "  left_image:  " << width <<  " x " << height  << std::endl;
+    std::cout << "  right_image: " << rwidth <<  " x " << rheight << std::endl;
     return; 
   }
 
-  int pad_width = lw + pad, height = lh;
+  int pad_width = width + pad;
   
   // Convert the image pixels from floats in [0, 1] to uint8_t in [0, 255].
   // To ensure a positive disparity, pad the left image on the left with enough zeros,
@@ -71,8 +72,8 @@ void process (const char* file_1, const char* file_2) {
     l_img_pad[i] = 0;
 
   int count = 0;
-  for (int ih = 0; ih < lh; ih++) {
-    for (int iw = 0; iw < lw; iw++) {
+  for (int ih = 0; ih < height; ih++) {
+    for (int iw = 0; iw < width; iw++) {
 
       float val = limg[count];
       if (std::isnan(val)) 
@@ -104,8 +105,8 @@ void process (const char* file_1, const char* file_2) {
     r_img_pad[i] = 0;
 
   count = 0;
-  for (int ih = 0; ih < rh; ih++) {
-    for (int iw = 0; iw < rw; iw++) {
+  for (int ih = 0; ih < height; ih++) {
+    for (int iw = 0; iw < width; iw++) {
 
       float val = rimg[count];
       if (std::isnan(val)) 
@@ -167,9 +168,9 @@ void process (const char* file_1, const char* file_2) {
   // To undo the previous operations
 
   count = 0;
-  float* lr_disp = (float*)malloc(lw * lh * sizeof(float));
-  for (int ih = 0; ih < lh; ih++) {
-    for (int iw = 0; iw < lw; iw++) {
+  float* lr_disp = (float*)malloc(width * height * sizeof(float));
+  for (int ih = 0; ih < height; ih++) {
+    for (int iw = 0; iw < width; iw++) {
       
       lr_disp[count] = lr_disp_pad[ih * pad_width + iw + pad];
       count++;
@@ -181,7 +182,7 @@ void process (const char* file_1, const char* file_2) {
   // Flip the sign of the lr disparity as the libelas convention is
   // the opposite we expect.  Ignore the rl disparity. 
   float nan = std::numeric_limits<float>::quiet_NaN();
-  for (int32_t i = 0; i < lw * lh; i++) {
+  for (int32_t i = 0; i < width * height; i++) {
     if (lr_disp[i] < 0)
       lr_disp[i] = nan;
     else
@@ -190,7 +191,7 @@ void process (const char* file_1, const char* file_2) {
   
   char filename[] = "out_disp.tif";
   std::cout << "Writing " << filename << std::endl;
-  iio_save_image_float((char*)filename, lr_disp, lw, lh);
+  iio_save_image_float((char*)filename, lr_disp, width, height);
 
 #if 0
   char filename_lr[] = "lr_disp_pad.tif";
