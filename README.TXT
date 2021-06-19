@@ -1,8 +1,22 @@
-This is a fork of ``libelas``, from https://github.com/kou1okada/libelas, hence it is released under the same terms as the original.
+This is a fork of ``libelas``, from
 
-The changes are at the interface level, the resulting tool is able to read and write not 8-big PGM files but TIF files with float values and input parameters. It can also handle negative disparities and command line options. It changes the sign of the disparity before writing it back to disk and sets invalid disparties to NaN.
+    https://github.com/kou1okada/libelas
 
-The facilities for handling TIF files and command-line argument handling is borrowed from https://github.com/gfacciol/mgm.
+It is released under the same terms as the original.
+
+The changes are at the interface level, the resulting tool is able to
+parse input options and read and write TIF files with float values. It
+can also handle negative disparities and command line options. It also
+changes the sign of the disparity before writing it back to disk,
+applies some outlier filtering to the disparity, and sets invalid
+disparties to NaN.
+
+The facility for handling TIF files is borrowed from
+https://github.com/gfacciol/mgm.
+
+Usage: 
+
+    elas <options> left_image.tif right_image.tif output_disparity.tif
 
 Original documentation is below.
 
