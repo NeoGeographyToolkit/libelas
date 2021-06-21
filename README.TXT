@@ -6,10 +6,10 @@ It is released under the same terms as the original.
 
 The changes are at the interface level, the resulting tool is able to
 parse input options and read and write TIF files with float values. It
-can also handle negative disparities and command line options. It also
-changes the sign of the disparity before writing it back to disk,
-applies some outlier filtering to the disparity, and sets invalid
-disparties to NaN.
+can handle negative disparities and command line options. It changes
+the sign of the disparity before writing it back to disk, applies some
+outlier filtering to the disparity, and sets invalid disparities to
+NaN.
 
 The facility for handling TIF files is borrowed from
 https://github.com/gfacciol/mgm.
@@ -17,6 +17,14 @@ https://github.com/gfacciol/mgm.
 Usage: 
 
     elas <options> left_image.tif right_image.tif output_disparity.tif
+
+Invoking this program with the correct inputs and the opiton `-verbose
+1`, will print the values of the parameters being used by this
+program. Those can be overridden from the command line, for example
+as:
+
+    elas -ipol_gap_width 100 -postprocess_only_left 0 <other options>
+
 
 Original documentation is below.
 

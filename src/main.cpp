@@ -37,6 +37,43 @@ extern "C" {
 
 using namespace std;
 
+// Parse the input arguments. Assume that each option starts with a
+// dash, and it has only one value, which is a float. The rest of the
+// arguments are files.
+int parse_args(int argc, char** argv,
+               std::map<std::string, float> & options,
+               std::vector<std::string> & files) {
+  
+  // Wipe the outputs first
+  options.clear();
+  files.clear();
+
+  for (int it = 1; it < argc; it++) {
+
+    // Sanity check. There must be no double-dashes.
+    if (strlen(argv[it]) > 1 && argv[it][0] == '-' && argv[it][1] == '-') {
+      std::cout << "ERROR: Only single-dash options are allowed. Got: " << argv[it] << std::endl;
+      return 1;
+    }
+    
+    if (strlen(argv[it]) > 0 && argv[it][0] == '-') {
+      // This is an option
+      if (it == argc - 1) {
+        std::cout << "ERROR: Found an option without a value." << std::endl;
+        return 1;
+      }
+      options[std::string(argv[it])] = atof(argv[it+1]);
+
+      // Jump over the value we just parsed
+      it++;
+    } else {
+      files.push_back(argv[it]);
+    }
+    
+  }
+  return 0;
+}
+  
 // These ugly macros saves a lot of typing
 
 #define SET_VAL(val)               \
@@ -106,72 +143,32 @@ void print_param_vals(Elas::parameters const& params) {
 #undef SET_VAL
 #undef PRINT_VAL
 
-int process(std::map<std::string, float> const& options,
-            std::string const& left_image, std::string const& right_image,
-            std::string const& out_disp) {
+// Copy an image as a block in a wider image with the same height,
+// scale the pixels, and transform to uint8. Assume that the images
+// have been allocated by now.
+void insert_scale_block(float const* img, uint8_t* img_pad, int width, int height,
+                        int padded_width, int pad) {
+
+  for (int i = 0; i < padded_width * height; i++) 
+    img_pad[i] = 0;
   
-  std::cout << "Processing: " << left_image << ", " << right_image << std::endl;
-
-  // TODO(oalexan1): Need to think more here.
-  Elas::parameters params;
-  fill_params_from_options(options, params);
-
-  std::cout << "Input disp_min and disp_max: "
-            << params.disp_min << ' ' << params.disp_max << std::endl;
-  
-  // Note how we adjust disp_min and disp_max, as libelas likes only a positive disparity
-  int pad = std::max(-params.disp_min, 0);
-  params.disp_min = 0;
-  params.disp_max = params.disp_max + pad;
-  std::cout << "Adjust for LIBELAS only being able to handle positive disparities." << std::endl;
-  std::cout << "Pad the left image on the left with " << pad << " columns of zeros."<< std::endl;
-
-  int width, height; 
-  float * limg = iio_read_image_float(left_image.c_str(), &width, &height);
-
-  int rwidth, rheight; 
-  float * rimg = iio_read_image_float(right_image.c_str(), &rwidth, &rheight);
-
-  // check for correct size
-  if (width <= 0 || height <= 0 || rwidth <= 0 || rheight <= 0 ||
-      width != rwidth || height != rheight) {
-    std::cout << "ERROR: Images must be of same size, but got: " << std::endl;
-    std::cout << "  left_image:  " << width <<  " x " << height  << std::endl;
-    std::cout << "  right_image: " << rwidth <<  " x " << rheight << std::endl;
-    return 1; 
-  }
-
-  int pad_width = width + pad;
-
-  // TODO(oalexan1): Make these into functions.
-  
-  // Convert the image pixels from floats in [0, 1] to uint8_t in [0, 255].
-  // To ensure a positive disparity, pad the left image on the left with enough zeros,
-  // and pad the right image on the right with the same amount.
-  uint8_t* l_img_pad = (uint8_t*)malloc(pad_width * height * sizeof(uint8_t));
-  uint8_t* r_img_pad = (uint8_t*)malloc(pad_width * height * sizeof(uint8_t));
-
-  // Process the left image
-  for (int i = 0; i < pad_width * height; i++) 
-    l_img_pad[i] = 0;
-
   int count = 0;
   for (int ih = 0; ih < height; ih++) {
     for (int iw = 0; iw < width; iw++) {
-
-      float val = limg[count];
+      
+      float val = img[count];
       if (std::isnan(val)) 
         val = 0.0;
-
+      
       val *= 255.0;
       val = round(val);
       if (val < 0) 
         val = 0;
       if (val > 255.0)
         val = 255.0;
-
-      // The zero padding is on the left, so add the 'pad' value
-      l_img_pad[ih * pad_width + iw + pad] = (uint8_t)val;
+      
+      // Insert padding on the left 
+      img_pad[ih * padded_width + iw + pad] = (uint8_t)val;
       
       count++;
     }
@@ -179,57 +176,25 @@ int process(std::map<std::string, float> const& options,
 
 #if 0
   // For debugging
-   char l_img_pad_file[] = "l_img_pad.tif";
+   char img_pad_file[] = "img_pad.tif";
    int ch = 1;
-   iio_save_image_uint8_vec((char*)l_img_pad_file, l_img_pad, pad_width, height, ch);
+   iio_save_image_uint8_vec((char*)img_pad_file, img_pad, padded_width, height, ch);
 #endif
    
-  // Process the right image
-  for (int i = 0; i < pad_width * height; i++) 
-    r_img_pad[i] = 0;
+}
 
-  count = 0;
-  for (int ih = 0; ih < height; ih++) {
-    for (int iw = 0; iw < width; iw++) {
-
-      float val = rimg[count];
-      if (std::isnan(val)) 
-        val = 0.0;
-
-      val *= 255.0;
-      val = round(val);
-      if (val < 0) 
-        val = 0;
-      if (val > 255.0)
-        val = 255.0;
-
-      // The zero padding is on the right, so no need to add anything
-      r_img_pad[ih * pad_width + iw] = (uint8_t)val;
-      
-      count++;
-    }
-  }
+// When the disparities have a big jump, the ones after the jump are
+// outliers.  Remove those.
+// TODO(oalexan1): This is fragile.
+void filter_disparity(float * disp, int width, int height) {
   
-  // allocate memory for disparity images
-  const int32_t dims[3] = {pad_width, height, pad_width}; // bytes per line = width
-  float* lr_disp_pad = (float*)malloc(pad_width * height * sizeof(float));
-  float* rl_disp_pad = (float*)malloc(pad_width * height * sizeof(float));
-  
-  // process
-  Elas elas(params);
-  print_param_vals(params);
-  elas.process(l_img_pad, r_img_pad, lr_disp_pad, rl_disp_pad, dims);
-
-  // When the disparities have a big jump, the ones after the jump are outliers.
-  // TODO(oalexan1): This is fragile.
-  // TODO(oalexan1): Make this into a function.
-  float* sorted_disp = (float*)malloc(pad_width * height * sizeof(float));
-  for (int i = 0; i < pad_width * height; i++)
-    sorted_disp[i] = lr_disp_pad[i];
-  std::sort(sorted_disp, sorted_disp + pad_width * height);
+  float* sorted_disp = (float*)malloc(width * height * sizeof(float));
+  for (int i = 0; i < width * height; i++)
+    sorted_disp[i] = disp[i];
+  std::sort(sorted_disp, sorted_disp + width * height);
 
   float max_jump = -1.0, max_valid = -1.0;
-  for (int i = 0; i < pad_width * height - 1; i++) {
+  for (int i = 0; i < width * height - 1; i++) {
     float a = sorted_disp[i];
     float b = sorted_disp[i + 1];
 
@@ -243,16 +208,94 @@ int process(std::map<std::string, float> const& options,
   }
   free(sorted_disp);
 
-  for (int i = 0; i < pad_width * height; i++)
-    if (lr_disp_pad[i] > max_valid)
-      lr_disp_pad[i] = -10.0; // invalidate the outlier disparity
+  // TODO(oalexan1): Need to think more here
+  if (max_jump > 2) {
+    for (int i = 0; i < width * height; i++)
+      if (disp[i] > max_valid)
+        disp[i] = -10.0; // invalidate the outlier disparity
+  }
   
+}
+
+int process(std::map<std::string, float> const& options,
+            std::string const& left_image, std::string const& right_image,
+            std::string const& out_disp) {
+  
+  Elas::parameters params;
+  fill_params_from_options(options, params);
+
+  bool verbose = false;
+  auto it = options.find("-verbose");
+  if (it != options.end() && it->second != 0) {
+    verbose = true;
+  }
+
+  if (verbose) 
+    std::cout << "Input disp_min and disp_max: "
+              << params.disp_min << ' ' << params.disp_max << std::endl;
+  
+  // Note how we adjust disp_min and disp_max, as libelas likes only a positive disparity
+  int pad = std::max(-params.disp_min, 0);
+  params.disp_min = 0;
+  params.disp_max = params.disp_max + pad;
+  if (verbose) {
+    std::cout << "Adjust for LIBELAS only being able to handle positive disparities." << std::endl;
+    std::cout << "Pad the left image on the left with " << pad << " columns of zeros."<< std::endl;
+    std::cout << "Reading: " << left_image << ' ' << right_image << std::endl;
+  }
+  
+  int width, height; 
+  float * l_img = iio_read_image_float(left_image.c_str(), &width, &height);
+
+  int rwidth, rheight; 
+  float * r_img = iio_read_image_float(right_image.c_str(), &rwidth, &rheight);
+
+  // check for correct size
+  if (width <= 0 || height <= 0 || rwidth <= 0 || rheight <= 0 ||
+      width != rwidth || height != rheight) {
+    std::cout << "ERROR: Images must be of same size, but got: " << std::endl;
+    std::cout << "  left_image:  " << width <<  " x " << height  << std::endl;
+    std::cout << "  right_image: " << rwidth <<  " x " << rheight << std::endl;
+    return 1; 
+  }
+
+  int padded_width = width + pad;
+
+  // Convert the image pixels from floats in [0, 1] to uint8_t in [0,
+  // 255].  To ensure a positive disparity, pad the left image on the
+  // left with enough zeros, and pad the right image on the right with
+  // the same amount.
+
+  // Process the left image
+  uint8_t* l_img_pad = (uint8_t*)malloc(padded_width * height * sizeof(uint8_t));
+  insert_scale_block(l_img, l_img_pad, width, height, padded_width, pad);
+
+  // Process the right image. Note how we pad right, so we insert no extra
+  // columns on the left.
+  uint8_t* r_img_pad = (uint8_t*)malloc(padded_width * height * sizeof(uint8_t));
+  insert_scale_block(r_img, r_img_pad, width, height, padded_width, 0);
+
+  // allocate memory for disparity images
+  float* lr_disp_pad = (float*)malloc(padded_width * height * sizeof(float));
+  float* rl_disp_pad = (float*)malloc(padded_width * height * sizeof(float));
+  
+  // process
+  const int32_t dims[3] = {padded_width, height, padded_width}; // bytes per line = width
+  Elas elas(params);
+  if (verbose) 
+    print_param_vals(params);
+  elas.process(l_img_pad, r_img_pad, lr_disp_pad, rl_disp_pad, dims);
+
+  // When the disparities have a big jump, the ones after the jump are outliers.
+  // TODO(oalexan1): This is fragile.
+  filter_disparity(lr_disp_pad, padded_width, height);
+
   // Remove the padding by cropping the disparity
-  count = 0;
+  int count = 0;
   float* lr_disp = (float*)malloc(width * height * sizeof(float));
   for (int ih = 0; ih < height; ih++) {
     for (int iw = 0; iw < width; iw++) {
-      lr_disp[count] = lr_disp_pad[ih * pad_width + iw + pad];
+      lr_disp[count] = lr_disp_pad[ih * padded_width + iw + pad];
       count++;
     }
   }
@@ -267,18 +310,19 @@ int process(std::map<std::string, float> const& options,
     else
       lr_disp[i] = -(lr_disp[i] - pad);
   }
-  
-  std::cout << "Writing " << out_disp << std::endl;
+
+  if (verbose) 
+    std::cout << "Writing " << out_disp << std::endl;
   iio_save_image_float((char*)out_disp.c_str(), lr_disp, width, height);
 
 #if 0
   char filename_lr[] = "lr_disp_pad.tif";
   std::cout << "Writing " << filename_lr << std::endl;
-  iio_save_image_float((char*)filename_lr, lr_disp_pad, pad_width, height);
+  iio_save_image_float((char*)filename_lr, lr_disp_pad, padded_width, height);
 
   char filename_rl[] = "rl_disp_pad.tif";
   std::cout << "Writing " << filename_rl << std::endl;
-  iio_save_image_float((char*)filename_rl, rl_disp_pad, pad_width, height);
+  iio_save_image_float((char*)filename_rl, rl_disp_pad, padded_width, height);
 #endif
   
   // free memory
@@ -291,38 +335,8 @@ int process(std::map<std::string, float> const& options,
   return 0;
 }
 
-// Parse the input arguments. Assume that each option starts with a dash,
-// and its value is a float. The rest of the arguments are files.
-int parse_args(int argc, char** argv,
-                std::map<std::string, float> & options,
-                std::vector<std::string> & files) {
-
-  // Wipe the outputs first
-  options.clear();
-  files.clear();
-
-  for (int it = 1; it < argc; it++) {
-
-    if (strlen(argv[it]) > 0 && argv[it][0] == '-') {
-      // This is an option
-      if (it == argc - 1) {
-        std::cout << "ERROR: Found an option without a value." << std::endl;
-        return 1;
-      }
-      options[std::string(argv[it])] = atof(argv[it+1]);
-
-      // Jump over the value we just parsed
-      it++;
-    } else {
-      files.push_back(argv[it]);
-    }
-    
-  }
-  return 0;
-}
-  
 int main (int argc, char** argv) {
-  
+
   // Parse the options 
   std::map<std::string, float> options;
   std::vector<std::string> files;
@@ -338,8 +352,6 @@ int main (int argc, char** argv) {
   left_image  = files[0];
   right_image = files[1];
   out_disp    = files[2];
-
-  std::cout << "Reading " << left_image << ' ' << right_image << ' ' << out_disp << std::endl;
 
   return process(options, left_image, right_image, out_disp);
 }
