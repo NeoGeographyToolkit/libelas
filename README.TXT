@@ -34,10 +34,10 @@ Command line options
 ====================
 
 -disp_min (default = 0):
-    Minimum disparity (ASP estimates this unless the user overrides it).
+    Minimum disparity.
 
 -disp_max (default = 255):
-    Maximum disparity (ASP estimates this unless the user overrides it).
+    Maximum disparity.
 
 -support_threshold (default = 0.85):
     Maximum uniqueness ratio (best vs. second-best support match).
