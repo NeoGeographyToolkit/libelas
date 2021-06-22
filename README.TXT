@@ -25,7 +25,7 @@ as:
 
     elas -ipol_gap_width 100 -postprocess_only_left 0 <other options>
 
-A description of its options is at::
+A description of its options is at:
 
     https://stereopipeline.readthedocs.io/en/latest/stereo_algorithms.html#libelas-stereo-algorithm
 
