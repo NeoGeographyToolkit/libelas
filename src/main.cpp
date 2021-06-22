@@ -146,7 +146,8 @@ void print_param_vals(Elas::parameters const& params) {
 // Copy an image as a block in a wider image with the same height,
 // scale the pixels, and transform to uint8. Assume that the images
 // have been allocated by now.
-void insert_scale_block(float const* img, uint8_t* img_pad, int width, int height,
+void insert_scale_block(float const* img, uint8_t* img_pad,
+                        double scale, int width, int height,
                         int padded_width, int pad) {
 
   for (int i = 0; i < padded_width * height; i++) 
@@ -160,7 +161,7 @@ void insert_scale_block(float const* img, uint8_t* img_pad, int width, int heigh
       if (std::isnan(val)) 
         val = 0.0;
       
-      val *= 255.0;
+      val *= scale;
       val = round(val);
       if (val < 0) 
         val = 0;
@@ -174,13 +175,6 @@ void insert_scale_block(float const* img, uint8_t* img_pad, int width, int heigh
     }
   }
 
-#if 0
-  // For debugging
-   char img_pad_file[] = "img_pad.tif";
-   int ch = 1;
-   iio_save_image_uint8_vec((char*)img_pad_file, img_pad, padded_width, height, ch);
-#endif
-   
 }
 
 // When the disparities have a big jump, the ones after the jump are
@@ -216,6 +210,13 @@ void filter_disparity(float * disp, int width, int height) {
   }
   
 }
+void savePGM(int width, int height, uint8_t* img, const char *name) {
+
+  int uchar_max = 255;
+  std::ofstream file(name, std::ios::out | std::ios::binary);
+  file << "P5\n" << width << " " << height << "\n" << uchar_max << "\n";
+  file.write((char *)img, width * height * sizeof(uint8_t));
+}
 
 int process(std::map<std::string, float> const& options,
             std::string const& left_image, std::string const& right_image,
@@ -233,6 +234,16 @@ int process(std::map<std::string, float> const& options,
   if (verbose) 
     std::cout << "Input disp_min and disp_max: "
               << params.disp_min << ' ' << params.disp_max << std::endl;
+
+  // Multiply image pixels by this value
+  double scale = 255.0;
+  it = options.find("-scale");
+  if (it != options.end() && it->second != 0) {
+    scale = it->second;
+  }
+
+  if (verbose) 
+    std::cout << "Multiplying input pixels by: " << scale << std::endl;
   
   // Note how we adjust disp_min and disp_max, as libelas likes only a positive disparity
   int pad = std::max(-params.disp_min, 0);
@@ -268,12 +279,35 @@ int process(std::map<std::string, float> const& options,
 
   // Process the left image
   uint8_t* l_img_pad = (uint8_t*)malloc(padded_width * height * sizeof(uint8_t));
-  insert_scale_block(l_img, l_img_pad, width, height, padded_width, pad);
+  insert_scale_block(l_img, l_img_pad, scale, width, height, padded_width, pad);
 
   // Process the right image. Note how we pad right, so we insert no extra
   // columns on the left.
   uint8_t* r_img_pad = (uint8_t*)malloc(padded_width * height * sizeof(uint8_t));
-  insert_scale_block(r_img, r_img_pad, width, height, padded_width, 0);
+  insert_scale_block(r_img, r_img_pad, scale, width, height, padded_width, 0);
+
+#if 0
+  // For debugging, save as tif
+  int ch = 1;
+  char l_img_pad_file[] = "l_img_pad.tif";
+  std::cout << "Writing: " << l_img_pad_file << std::endl;
+  iio_save_image_uint8_vec((char*)l_img_pad_file, l_img_pad, padded_width, height, ch);
+
+  char r_img_pad_file[] = "r_img_pad.tif";
+  std::cout << "Writing: " << r_img_pad_file << std::endl;
+  iio_save_image_uint8_vec((char*)r_img_pad_file, r_img_pad, padded_width, height, ch);
+#endif
+
+#if 0
+  // for debugging, save as pgm
+  char l_img_pad_file[] = "l_img_pad.pgm";
+  std::cout << "Writing: " << l_img_pad_file << std::endl;
+  savePGM(padded_width, height, l_img_pad, l_img_pad_file);
+
+  char r_img_pad_file[] = "r_img_pad.pgm";
+  std::cout << "Writing: " << r_img_pad_file << std::endl;
+  savePGM(padded_width, height, r_img_pad, r_img_pad_file);
+#endif
 
   // allocate memory for disparity images
   float* lr_disp_pad = (float*)malloc(padded_width * height * sizeof(float));
