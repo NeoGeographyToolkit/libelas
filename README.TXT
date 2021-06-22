@@ -11,6 +11,9 @@ the sign of the disparity before writing it back to disk, applies some
 outlier filtering to the disparity, and sets invalid disparities to
 NaN.
 
+The program assumes that the input images have float pixels with values 
+between 0 and 1.
+
 The facility for handling TIF files is borrowed from
 https://github.com/gfacciol/mgm.
 
