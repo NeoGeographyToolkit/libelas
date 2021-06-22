@@ -12,7 +12,9 @@ outlier filtering to the disparity, and sets invalid disparities to
 NaN.
 
 The program assumes that the input images have float pixels with values 
-between 0 and 1.
+between 0 and 1. Those will be scaled to 0 to 255 and cast to uint8 before 
+invoking libelas. Use the option ``-scale val`` to change the value of the 
+multiplier.
 
 The facility for handling TIF files is borrowed from
 https://github.com/gfacciol/mgm.
@@ -28,11 +30,89 @@ as:
 
     elas -ipol_gap_width 100 -postprocess_only_left 0 <other options>
 
-A description of its options is at:
+Command line options
+====================
 
-    https://stereopipeline.readthedocs.io/en/latest/stereo_algorithms.html#libelas-stereo-algorithm
+-disp_min (default = 0):
+    Minimum disparity (ASP estimates this unless the user overrides it).
 
+-disp_max (default = 255):
+    Maximum disparity (ASP estimates this unless the user overrides it).
+
+-support_threshold (default = 0.85):
+    Maximum uniqueness ratio (best vs. second-best support match).
+
+-support_texture (default = 10):
+    Minimum texture for support points.
+
+-candidate_stepsize (default = 5):
+    Step size of regular grid on which support points are matched.
+
+-incon_window_size (default = 5):
+    Window size of inconsistent support point check.
+
+-incon_threshold (default = 5):
+    Disparity similarity threshold for support point to be considered
+    consistent.
+
+-incon_min_support (default = 5):
+    Minimum number of consistent support points.
+
+-add_corners (default = 0):
+    Add support points at image corners with nearest neighbor
+    disparities.
+
+-grid_size (default = 20):
+    Size of neighborhood for additional support point extrapolation.
+
+-beta (default = 0.02):
+    Image likelihood parameter.
+
+-gamma (default = 3):
+    Prior constant.
+
+-sigma (default = 1):
+    Prior sigma.
+
+-sradius (default = 2):
+    Prior sigma radius.
+
+-match_texture (default = 1):
+    Minimum texture for dense matching.
+
+-lr_threshold (default = 2):
+    Disparity threshold for left-right consistency check.
+
+-speckle_sim_threshold (default = 1):
+    Similarity threshold for speckle segmentation.
+
+-speckle_size (default = 200):
+    Speckles larger than this get removed.
+
+-ipol_gap_width (default = 3):
+    Fill holes in disparity of height and width at most this value.
+
+-filter_median (default = 0):
+    If non-zero, use an approximate median filter.
+
+-filter_adaptive_mean (default = 1):
+    If non-zero, use an approximate adaptive mean filter.
+
+-postprocess_only_left (default = 0):
+    If non-zero, saves time by not postprocessing the right image.
+
+-verbose (default = 0):
+    If non-zero, print some information about the values of the
+    options being used, as well as what the input and output files
+    are.
+
+-scale (default = 255.0):
+
+   Multiply the input pixels by this value before casting to uint8. Hence the 
+   default assumes that the pixels are between 0 and 1.
+   
 Original documentation is below.
+===============================
 
 ####################################################################################
 # Copyright 2011. All rights reserved.                                             #
