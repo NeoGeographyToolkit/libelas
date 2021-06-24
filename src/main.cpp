@@ -346,16 +346,16 @@ int process(std::map<std::string, float> const& options,
   }
 
   if (verbose) 
-    std::cout << "Writing " << out_disp << std::endl;
+    std::cout << "Writing: " << out_disp << std::endl;
   iio_save_image_float((char*)out_disp.c_str(), lr_disp, width, height);
 
 #if 0
   char filename_lr[] = "lr_disp_pad.tif";
-  std::cout << "Writing " << filename_lr << std::endl;
+  std::cout << "Writing: " << filename_lr << std::endl;
   iio_save_image_float((char*)filename_lr, lr_disp_pad, padded_width, height);
 
   char filename_rl[] = "rl_disp_pad.tif";
-  std::cout << "Writing " << filename_rl << std::endl;
+  std::cout << "Writing: " << filename_rl << std::endl;
   iio_save_image_float((char*)filename_rl, rl_disp_pad, padded_width, height);
 #endif
   
