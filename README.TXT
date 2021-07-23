@@ -106,6 +106,9 @@ Command line options
     options being used, as well as what the input and output files
     are.
 
+-dump_images (default = 0): A debug option to print the images right
+    before invoking libelas on them.
+
 -scale (default = 255.0):
 
    Multiply the input pixels by this value before casting to uint8. Hence the 

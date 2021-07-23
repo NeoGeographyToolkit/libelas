@@ -235,6 +235,13 @@ int process(std::map<std::string, float> const& options,
     std::cout << "Input disp_min and disp_max: "
               << params.disp_min << ' ' << params.disp_max << std::endl;
 
+  // This is a debug option
+  bool dump_images = false;
+  it = options.find("-dump_images");
+  if (it != options.end() && it->second != 0) {
+    dump_images = true;
+  }
+
   // Multiply image pixels by this value
   double scale = 255.0;
   it = options.find("-scale");
@@ -286,18 +293,18 @@ int process(std::map<std::string, float> const& options,
   uint8_t* r_img_pad = (uint8_t*)malloc(padded_width * height * sizeof(uint8_t));
   insert_scale_block(r_img, r_img_pad, scale, width, height, padded_width, 0);
 
-#if 0
-  // For debugging, save as tif
-  int ch = 1;
-  char l_img_pad_file[] = "l_img_pad.tif";
-  std::cout << "Writing: " << l_img_pad_file << std::endl;
-  iio_save_image_uint8_vec((char*)l_img_pad_file, l_img_pad, padded_width, height, ch);
-
-  char r_img_pad_file[] = "r_img_pad.tif";
-  std::cout << "Writing: " << r_img_pad_file << std::endl;
-  iio_save_image_uint8_vec((char*)r_img_pad_file, r_img_pad, padded_width, height, ch);
-#endif
-
+  if (dump_images) {
+    // For debugging, save the padded and scaled images as .tif files.
+    int ch = 1;
+    std::string l_img_pad_file = left_image + ".scaled.padded.tif";
+    std::cout << "Writing: " << l_img_pad_file << std::endl;
+    iio_save_image_uint8_vec((char*)l_img_pad_file.c_str(), l_img_pad, padded_width, height, ch);
+    
+    std::string r_img_pad_file = right_image + ".scaled.padded.tif";
+    std::cout << "Writing: " << r_img_pad_file << std::endl;
+    iio_save_image_uint8_vec((char*)r_img_pad_file.c_str(), r_img_pad, padded_width, height, ch);
+  }
+  
 #if 0
   // for debugging, save as pgm
   char l_img_pad_file[] = "l_img_pad.pgm";
