@@ -177,8 +177,8 @@ void insert_scale_block(float const* img, uint8_t* img_pad,
 
 }
 
-// When the disparities have a big jump, the ones after the jump are
-// outliers.  Remove those.
+// When the disparities have a big jump, the ones either before or
+// after the jump are outliers. Remove the ones in the smaller group.
 // TODO(oalexan1): This is fragile.
 void filter_disparity(float * disp, int width, int height) {
   
@@ -187,7 +187,7 @@ void filter_disparity(float * disp, int width, int height) {
     sorted_disp[i] = disp[i];
   std::sort(sorted_disp, sorted_disp + width * height);
 
-  float max_jump = -1.0, max_valid = -1.0;
+  float max_jump = -1.0, cutoff_disp = -1.0;
   for (int i = 0; i < width * height - 1; i++) {
     float a = sorted_disp[i];
     float b = sorted_disp[i + 1];
@@ -197,19 +197,44 @@ void filter_disparity(float * disp, int width, int height) {
 
     if (b - a > max_jump) {
       max_jump = b - a;
-      max_valid = a;
+      cutoff_disp = a;
     }
   }
   free(sorted_disp);
 
-  // TODO(oalexan1): Need to think more here
-  if (max_jump > 2) {
-    for (int i = 0; i < width * height; i++)
-      if (disp[i] > max_valid)
-        disp[i] = -10.0; // invalidate the outlier disparity
+  if (max_jump <= 2)
+    return; // The jump is too small
+    
+  int num_before = 0, num_after = 0;
+  for (int i = 0; i < width * height; i++) {
+      
+    if (disp[i] < 0) 
+      continue; // negative disparities are outliers
+        
+    if (disp[i] <= cutoff_disp)
+      num_before++;
+    else
+      num_after++;
   }
-  
+
+  if (num_before < num_after) {
+    for (int i = 0; i < width * height; i++) {
+      if (disp[i] < 0) 
+        continue; // negative disparities are outliers
+      if (disp[i] <= cutoff_disp)
+        disp[i] = -10.0; // flag as outliers
+    }
+  } else {
+    for (int i = 0; i < width * height; i++) {
+      if (disp[i] < 0) 
+        continue; // negative disparities are outliers
+      if (disp[i] > cutoff_disp)
+        disp[i] = -10.0; // flag as outliers
+    }
+  }
+    
 }
+
 void savePGM(int width, int height, uint8_t* img, const char *name) {
 
   int uchar_max = 255;

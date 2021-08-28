@@ -6,7 +6,7 @@ FIND_PACKAGE(TIFF)
 INCLUDE_DIRECTORIES(${TIFF_INCLUDE_DIR})
 
 # use sse3 instruction set
-SET(CMAKE_CXX_FLAGS "-msse3")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse3")
 
 # directories
 set (LIBELAS_SRC_DIR src)
