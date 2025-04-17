@@ -488,9 +488,14 @@ int iio_type_id(size_t sample_size, bool ieeefp_sample, bool signed_sample)
 {
 	if (ieeefp_sample) {
 		if (signed_sample) fail("signed floats are a no-no!");
+		
+		// Fix for when long double and double have same size. Then compilation would fail.
+		if (sample_size == sizeof(double))
+		  return IIO_TYPE_DOUBLE;
+		
 		switch(sample_size) {
 		case sizeof(float):       return IIO_TYPE_FLOAT;
-		case sizeof(double):      return IIO_TYPE_DOUBLE;
+		//case sizeof(double):      return IIO_TYPE_DOUBLE;
 		case sizeof(long double): return IIO_TYPE_LONGDOUBLE;
 		case sizeof(float)/2:     return IIO_TYPE_HALF;
 		default: fail("bad float size %zu", sample_size);
@@ -2880,7 +2885,7 @@ static void iio_save_image_as_tiff(const char *filename, struct iio_image *x)
 	TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, x->pixel_dimension);
 	TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, ss * 8);
-	uint16 caca[1] = {EXTRASAMPLE_UNASSALPHA};
+	uint16_t caca[1] = {EXTRASAMPLE_UNASSALPHA};
 	switch (x->pixel_dimension) {
 	case 1:
 		TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
